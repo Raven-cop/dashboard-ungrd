@@ -843,6 +843,16 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
         <label>👤 Apoyo adicional</label>
         <select id="fApoyo"></select>
       </div>
+                   <!-- Apoyo 3 -->  <!--------------------------------------NUEVO -->
+      <div class="f-group">
+        <label>👤 Apoyo adicional</label>
+        <select id="fApoyo3"></select>
+      </div>
+            <!-- Apoyo 4 -->  <!--------------------------------------NUEVO -->
+      <div class="f-group">
+        <label>👤 Apoyo adicional</label>
+        <select id="fApoyo4"></select>
+      </div>
       <div class="f-group">
         <label>Fecha Inicio</label>
         <input type="date" id="fFechaInicio" onchange="document.getElementById('fSemIni').value = obtenerNumeroSemana(this.value)">
@@ -1019,7 +1029,7 @@ const RESPONSABLES_FIJOS = [
   "SEBASTIAN HERNANDEZ",
   "SIPLAG",
   "YADERTH CONTRERAS",
-  "ZENETH OLIVEROS",
+  "ZENETH OLIVERO",
   "DIANA MARTINEZ",
   "CESAR VILLAMIL"
 ];
@@ -1255,6 +1265,8 @@ function actualizarOpcionesFiltros(base) {
           if (a.responsable && a.responsable !== 'POR ASIGNAR') s.add(a.responsable);
           if (a.responsable_apoyo && a.responsable_apoyo !== 'POR ASIGNAR') s.add(a.responsable_apoyo);
           if (a.apoyo && a.apoyo !== 'POR ASIGNAR') s.add(a.apoyo);
+                    if (a.apoyo3 && a.apoyo3 !== 'POR ASIGNAR') s.add(a.apoyo3);  /* <!--------------------------------------NUEVO -->*/
+          if (a.apoyo4 && a.apoyo4 !== 'POR ASIGNAR') s.add(a.apoyo4); /* <!--------------------------------------NUEVO -->*/ 
         });
         return [...s].sort();
       }
@@ -1344,7 +1356,9 @@ function aplicarFiltros() {
     if (resp && !(
       a.responsable       === resp ||
       a.responsable_apoyo === resp ||
-      a.apoyo             === resp
+      a.apoyo             === resp ||
+      a.apoyo3            === resp || /* <!--------------------------------------NUEVO -->*/
+      a.apoyo4            === resp    /* <!--------------------------------------NUEVO -->*/
     )) return false;
     if (grupo  && a.grupo          !== grupo)  return false;
     if (tipo   && a.tipo_actividad !== tipo)   return false;
@@ -1902,6 +1916,8 @@ function guardarActividad() {
     responsable:       document.getElementById('fResponsable').value,
     responsable_apoyo: document.getElementById('fRespApoyo').value,
     apoyo:             document.getElementById('fApoyo').value,
+   apoyo3:            document.getElementById('fApoyo3').value, /* <!--------------------------------------NUEVO -->*/
+    apoyo4:            document.getElementById('fApoyo4').value, /* <!--------------------------------------NUEVO -->*/
     apoyo_otros:       'POR ASIGNAR',
     fecha_inicio:      '',
     mes_inicio:        '',
@@ -1962,6 +1978,8 @@ function limpiarFormulario() {
   });
   document.getElementById('fRespApoyo').value   = 'POR ASIGNAR';
   document.getElementById('fApoyo').value       = 'POR ASIGNAR';
+document.getElementById('fApoyo3').value       = 'POR ASIGNAR';   /* <!--------------------------------------NUEVO -->*/
+  document.getElementById('fApoyo4').value       = 'POR ASIGNAR';   /* <!--------------------------------------NUEVO -->*/
 }
 
 /* ============================================================
@@ -2129,6 +2147,8 @@ function abrirModalEditar(actId) {
   poblarSelectEditar('eResponsable');
   poblarSelectEditar('eRespApoyo');
   poblarSelectEditar('eApoyo');
+     poblarSelectEditar('eApoyo3');   /* <!--------------------------------------NUEVO -->*/
+  poblarSelectEditar('eApoyo4');   /* <!--------------------------------------NUEVO -->*/
   poblarSelectEditarGrupos('eGrupo');
 
   // Cargar valores actuales
@@ -2138,6 +2158,8 @@ function abrirModalEditar(actId) {
   document.getElementById('eResponsable').value = a.responsable  || 'POR ASIGNAR';
   document.getElementById('eRespApoyo').value   = a.responsable_apoyo || 'POR ASIGNAR';
   document.getElementById('eApoyo').value       = a.apoyo        || 'POR ASIGNAR';
+    document.getElementById('eApoyo3').value = a.apoyo3 || 'POR ASIGNAR'; /* <!--------------------------------------NUEVO -->*/
+  document.getElementById('eApoyo4').value = a.apoyo4 || 'POR ASIGNAR'; /* <!--------------------------------------NUEVO -->*/ 
   document.getElementById('eGrupo').value       = a.grupo        || '';
   document.getElementById('eSemIni').value      = a.semana_inicio || '';
   document.getElementById('eSemFin').value      = a.semana_fin    || '';
@@ -2213,6 +2235,8 @@ function guardarEdicion() {
   a.responsable       = document.getElementById('eResponsable').value;
   a.responsable_apoyo = document.getElementById('eRespApoyo').value;
   a.apoyo             = document.getElementById('eApoyo').value;
+  a.apoyo3             = document.getElementById('eApoyo3').value;  /* <!--------------------------------------NUEVO -->*/
+  a.apoyo4             = document.getElementById('eApoyo4').value;  /* <!--------------------------------------NUEVO -->*/
   a.grupo             = document.getElementById('eGrupo').value;
   a.semana_inicio     = parseInt(document.getElementById('eSemIni').value) || 0;
   a.semana_fin        = semFin;
@@ -2245,6 +2269,8 @@ function guardarEdicion() {
     responsable:       a.responsable,
     responsable_apoyo: a.responsable_apoyo,
     apoyo:             a.apoyo,
+       apoyo3:             a.apoyo3, /* <!--------------------------------------NUEVO -->*/
+    apoyo4:             a.apoyo4,  /* <!--------------------------------------NUEVO -->*/
     grupo:             a.grupo,
     semana_inicio:     a.semana_inicio,
     semana_fin:        a.semana_fin,
@@ -2893,22 +2919,40 @@ function validarGrupoParaGuardar(grupoSeleccionado) {
         <label>👤 Apoyo adicional</label>
         <select id="eApoyo"></select>
       </div>
+            <div class="f-group">                           /* <!--------------------------------------NUEVO -->*/
+        <label>👤 Apoyo adicional</label>
+        <select id="eApoyo3"></select>
+      </div>
+      <div class="f-group">                            /* <!--------------------------------------NUEVO -->*/
+        <label>👤 Apoyo adicional</label>
+        <select id="eApoyo4"></select>
+      </div>
       <div class="f-group">
         <label>Grupo / Equipo</label>
         <select id="eGrupo"></select>
       </div>
 
-      <!-- SECCIÓN: Tiempos -->
+      <!-- SECCIÓN: Tiempos -->                             /* <!--------------------------------------NUEVO -->*/
       <div class="edit-section-hdr">📅 Semanas de ejecución</div>
+<div class="f-group">
+      <label>📅 Fecha Inicio</label>                                       /* <!--------------------------------------NUEVO -->*/
+      <input type="date" id="eFechaInicio" onchange="document.getElementById('eSemIni').value = obtenerNumeroSemana(this.value)">
+    </div>
 
-      <div class="f-group">
-        <label>Semana Inicio (1–48)</label>
-        <input type="number" id="eSemIni" min="0" max="48">
-      </div>
-      <div class="f-group">
-        <label>Semana Fin (1–48)</label>
-        <input type="number" id="eSemFin" min="0" max="48">
-      </div>
+    <div class="f-group">                       /* <!--------------------------------------NUEVO -->*/
+      <label>📅 Fecha Fin</label>
+      <input type="date" id="eFechaFin" onchange="document.getElementById('eSemFin').value = obtenerNumeroSemana(this.value)">
+    </div>
+
+    <div class="f-group">                       /* <!--------------------------------------NUEVO -->*/
+      <label>Semana Inicio (Auto)</label>
+      <input type="number" id="eSemIni" min="0" max="48" readonly style="background:#f0f2f5; font-weight:bold;">
+    </div>
+
+    <div class="f-group">                       /* <!--------------------------------------NUEVO -->*/
+      <label>Semana Fin (Auto)</label>
+      <input type="number" id="eSemFin" min="0" max="48" readonly style="background:#f0f2f5; font-weight:bold;">
+    </div>
       <div class="f-group">
         <label>Mes Inicio</label>
         <select id="eMesIni">
