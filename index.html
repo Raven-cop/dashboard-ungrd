@@ -1808,11 +1808,10 @@ function renderTabla() {
         <td>
           ${(puedeEditar(a)) ?
             `<button class="btn-sm btn-sm-avance" onclick="abrirModalAvance('${a.id}')">📈 Avance</button>
-             <button class="btn-sm btn-sm-edit" onclick="abrirModalEditar('${a.id}')" style="margin-top:3px;">✏️ Editar</button>`
-             ${a.archivada
-               ? `<button class="btn-sm btn-sm-restore" onclick="archivarActividad('${a.id}', false)" style="margin-top:3px;">♻️ Restaurar</button>`
-               : `<button class="btn-sm btn-sm-archive" onclick="archivarActividad('${a.id}', true)" style="margin-top:3px;">🗃 Archivar</button>`
-             }`
+             <button class="btn-sm btn-sm-edit" onclick="abrirModalEditar('${a.id}')" style="margin-top:3px;">✏️ Editar</button>` +
+             (a.archivada
+               ? '<button class="btn-sm btn-sm-restore" onclick="archivarActividad(\''+ a.id +'\', false)" style="margin-top:3px;">♻️ Restaurar</button>'
+               : '<button class="btn-sm btn-sm-archive" onclick="archivarActividad(\''+ a.id +'\', true)" style="margin-top:3px;">🗃 Archivar</button>')
             : '<span style="font-size:10px;color:#bbb;">👁 Solo lectura</span>'}
         </td>
       </tr>`;
