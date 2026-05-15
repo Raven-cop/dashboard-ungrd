@@ -486,6 +486,15 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
 }
 .clas-all:hover { background:#f0f5ff; }
 
+
+/* ===== ARCHIVAR ===== */
+.btn-sm-archive { background:#fff3e0; color:#e65100; }
+.btn-sm-archive:hover { background:#e65100; color:#fff; }
+.btn-sm-restore { background:#e8f5e9; color:var(--verde); }
+.btn-sm-restore:hover { background:var(--verde); color:#fff; }
+.row-archivada td { opacity:0.45; }
+.archivo-badge { background:#fff3e0; color:#e65100; font-size:9px; font-weight:700;
+  padding:1px 5px; border-radius:3px; display:inline-block; }
 /* ===== PRINT ===== */
 /* ===== PRINT ===== */
 @media print {
@@ -628,6 +637,10 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
       </div>
     </div>
     <button class="btn-reset" onclick="resetFiltros()">↺ Limpiar</button>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gris-osc);cursor:pointer;align-self:flex-end;">
+      <input type="checkbox" id="mostrarArchivadas" onchange="aplicarFiltros()" style="accent-color:var(--naranja);width:14px;height:14px;">
+      Ver archivadas
+    </label>
     <span class="semana-actual-badge" id="semanaActualBadge">⏱ Semana actual: 14</span>
     <div class="filtros-ts" id="ultimaActualizacion"></div>
   </div>
@@ -1172,7 +1185,7 @@ function cargarDatos() {
       if (fbData) {
         ['descripcion','entregable','tema','responsable','responsable_apoyo',
          'apoyo','grupo','semana_inicio','semana_fin','mes_inicio','mes_fin',
-         'fecha_inicio','fecha_fin','tipo_actividad','categorias','avance'].forEach(k => {
+         'fecha_inicio','fecha_fin','apoyo3','apoyo4','tipo_actividad','categorias','avance','archivada'].forEach(k => {
           if (fbData[k] !== undefined) clone[k] = fbData[k];
         });
       }
@@ -1216,8 +1229,10 @@ function poblarSelectsResponsables() {
   });
 
   // Modal agregar - todos los selects de personas
-  ['fResponsable','fRespApoyo','fApoyo'].forEach(id => {
+  // Poblar TODOS los selects de personas en el modal agregar
+  ['fResponsable','fRespApoyo','fApoyo','fApoyo3','fApoyo4'].forEach(id => {
     const sel = document.getElementById(id);
+    if (!sel) return;
     RESPONSABLES_FIJOS.forEach(r => {
       const o = document.createElement('option'); o.value = r; o.textContent = r;
       sel.appendChild(o);
@@ -1369,12 +1384,17 @@ function aplicarFiltros() {
       a.descripcion.toLowerCase().includes(buscar) ||
       a.responsable.toLowerCase().includes(buscar) ||
       a.grupo.toLowerCase().includes(buscar)       ||
-      (a.tema && a.tema.toLowerCase().includes(buscar))
+      (a.tema && a.tema.toLowerCase().includes(buscar)) ||
+      (a.entregable && a.entregable.toLowerCase().includes(buscar))
     )) return false;
    
     // Filtro clasificación:
     // - 1 seleccionada → muestra todas las que la contienen (aunque tengan más)
     // - 2 o más seleccionadas → igualdad exacta (solo las que tienen exactamente esas)
+    // Ocultar archivadas salvo que el checkbox esté marcado
+    const verArch = document.getElementById('mostrarArchivadas');
+    if (a.archivada && !(verArch && verArch.checked)) return false;
+
     if (clasificaciones.length > 0) {
       const cats = a.categorias || [];
       if (clasificaciones.length === 1) {
@@ -1530,7 +1550,7 @@ function renderChartPersonas() {
   if (!leg) return;
   var personas = {};
   filteredData.forEach(function(a) {
-    [a.responsable, a.responsable_apoyo, a.apoyo].forEach(function(p) {
+    [a.responsable, a.responsable_apoyo, a.apoyo, a.apoyo3, a.apoyo4].forEach(function(p) {
       if (!p || p === 'POR ASIGNAR' || p === 'SIN APOYO') return;
       if (!personas[p]) personas[p] = {total:0,atrasadas:0,seguimiento:0,finalizadas:0};
       personas[p].total++;
@@ -1789,6 +1809,10 @@ function renderTabla() {
           ${(puedeEditar(a)) ?
             `<button class="btn-sm btn-sm-avance" onclick="abrirModalAvance('${a.id}')">📈 Avance</button>
              <button class="btn-sm btn-sm-edit" onclick="abrirModalEditar('${a.id}')" style="margin-top:3px;">✏️ Editar</button>`
+             ${a.archivada
+               ? `<button class="btn-sm btn-sm-restore" onclick="archivarActividad('${a.id}', false)" style="margin-top:3px;">♻️ Restaurar</button>`
+               : `<button class="btn-sm btn-sm-archive" onclick="archivarActividad('${a.id}', true)" style="margin-top:3px;">🗃 Archivar</button>`
+             }`
             : '<span style="font-size:10px;color:#bbb;">👁 Solo lectura</span>'}
         </td>
       </tr>`;
@@ -2879,6 +2903,34 @@ function validarGrupoParaGuardar(grupoSeleccionado) {
     return false;
   }
   return true;
+}
+
+/* ============================================================
+   ARCHIVAR / RESTAURAR ACTIVIDAD
+   Solo el ADMINISTRADOR puede archivar o restaurar.
+   Las actividades archivadas desaparecen de todo el dashboard
+   salvo que se active el checkbox "Ver archivadas".
+   ============================================================ */
+function archivarActividad(actId, archivar) {
+  if (grupoActual !== 'ADMINISTRADOR') {
+    mostrarToast('⚠️ Solo el administrador puede archivar actividades', 3000);
+    return;
+  }
+
+  const accion = archivar ? 'archivar' : 'restaurar';
+  if (!confirm('¿Seguro que quieres ' + accion + ' la actividad ' + actId + '?')) return;
+
+  // Actualizar en memoria
+  const a = allData.find(x => x.id === actId);
+  if (a) a.archivada = archivar;
+
+  // Guardar en Firebase
+  DB.ref('ungrd/actividades/' + actId + '/archivada').set(archivar)
+    .then(() => {
+      mostrarToast(archivar ? '🗃 Actividad archivada' : '♻️ Actividad restaurada', 2500);
+      aplicarFiltros();
+    })
+    .catch(() => mostrarToast('⚠️ Error al guardar', 2000));
 }
 </script>
 
