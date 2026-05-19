@@ -1160,6 +1160,8 @@ document.addEventListener('DOMContentLoaded', () => {
   cargarDatos(); // muestra datos base inmediatamente, luego Firebase actualiza
 });
 
+let _ultimaEdicion = 0; // timestamp de la última edición local
+
 function cargarDatos() {
   // 1. Cargar datos base inmediatamente
   allData = DATA_EXCEL.map(a => ({
@@ -1171,6 +1173,9 @@ function cargarDatos() {
 
   // 2. Escuchar Firebase en tiempo real
   DB.ref('ungrd').on('value', snap => {
+    // Si hubo edición local en los últimos 3 segundos,
+    // ignorar el disparo del listener (evita sobrescribir con datos viejos)
+    if (Date.now() - _ultimaEdicion < 3000) return;
     const fb     = snap.val() || {};
     const fbActs = fb.actividades || {};
     const idsBase = new Set(DATA_EXCEL.map(d => d.id));
@@ -1384,7 +1389,7 @@ function aplicarFiltros() {
       a.descripcion.toLowerCase().includes(buscar) ||
       a.responsable.toLowerCase().includes(buscar) ||
       a.grupo.toLowerCase().includes(buscar)       ||
-      (a.tema && a.tema.toLowerCase().includes(buscar)) ||
+      ((a.tema || '').toLowerCase().includes(buscar)) ||
       (a.entregable && a.entregable.toLowerCase().includes(buscar))
     )) return false;
    
@@ -1810,8 +1815,8 @@ function renderTabla() {
             `<button class="btn-sm btn-sm-avance" onclick="abrirModalAvance('${a.id}')">📈 Avance</button>
              <button class="btn-sm btn-sm-edit" onclick="abrirModalEditar('${a.id}')" style="margin-top:3px;">✏️ Editar</button>` +
              (a.archivada
-               ? '<button class="btn-sm btn-sm-restore" onclick="archivarActividad(\''+ a.id +'\', false)" style="margin-top:3px;">♻️ Restaurar</button>'
-               : '<button class="btn-sm btn-sm-archive" onclick="archivarActividad(\''+ a.id +'\', true)" style="margin-top:3px;">🗃 Archivar</button>')
+               ? '<button class="btn-sm btn-sm-restore" data-id="'+ a.id +'" onclick="archivarActividad(this.dataset.id, false)" style="margin-top:3px;">♻️ Restaurar</button>'
+               : '<button class="btn-sm btn-sm-archive" data-id="'+ a.id +'" onclick="archivarActividad(this.dataset.id, true)" style="margin-top:3px;">🗃 Archivar</button>')
             : '<span style="font-size:10px;color:#bbb;">👁 Solo lectura</span>'}
         </td>
       </tr>`;
@@ -2060,6 +2065,7 @@ function confirmarAvance() {
   aplicarFiltros(); // render inmediato con el nuevo valor
 
   // 2. Persistir en Firebase (sincroniza con los demás)
+  _ultimaEdicion = Date.now();
   DB.ref('ungrd/actividades/' + a.id + '/avance').set(val)
     .then(() => mostrarToast('✅ Avance guardado y sincronizado', 2000))
     .catch(() => mostrarToast('⚠️ Guardado local, sin conexión', 2000));
@@ -2293,6 +2299,7 @@ function guardarEdicion() {
   a.alerta = calcularEstado(a);
 
   // Guardar edición completa en Firebase
+  _ultimaEdicion = Date.now(); // marcar edición local en curso
   DB.ref('ungrd/actividades/' + a.id).update({
     descripcion:       a.descripcion,
     entregable:        a.entregable,
@@ -2318,8 +2325,6 @@ function guardarEdicion() {
   cerrarModal('modalEditar');
   aplicarFiltros();
 
-  // Persistir en Firebase
-  DB.ref('ungrd/actividades/' + a.id + '/avance').set(avance);
   mostrarToast('✅ Cambios guardados y sincronizados', 2000);
 
   // Animación visual en la fila editada (si está visible)
