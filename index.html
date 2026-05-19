@@ -1197,18 +1197,17 @@ function cargarDatos() {
     // Actividades nuevas (extras)
     Object.values(fb.extras || {}).forEach(e => {
       if (!idsBase.has(e.id)) {
+        // Empezar con los datos del extra (ungrd/extras/)
         const extra = { ...e };
-        // Aplicar cambios de Firebase sobre extras también
-        const fbExtra = fbActs[e.id];
-        if (fbExtra) {
-          // Aplicar TODOS los campos editados sobre extras
-          ['descripcion','entregable','tema','responsable','responsable_apoyo',
-           'apoyo','apoyo3','apoyo4','grupo','semana_inicio','semana_fin',
-           'mes_inicio','mes_fin','fecha_inicio','fecha_fin','tipo_actividad',
-           'categorias','avance','archivada'].forEach(k => {
-            if (fbExtra[k] !== undefined) extra[k] = fbExtra[k];
-          });
-        }
+        // Aplicar encima cualquier edición guardada en ungrd/actividades/
+        const fbExtra = fbActs[e.id] || {};
+        ['descripcion','entregable','tema','responsable','responsable_apoyo',
+         'apoyo','apoyo3','apoyo4','grupo','semana_inicio','semana_fin',
+         'mes_inicio','mes_fin','fecha_inicio','fecha_fin','tipo_actividad',
+         'categorias','avance','archivada'].forEach(k => {
+          // Priorizar: fbExtra > extra (datos de creación)
+          if (fbExtra[k] !== undefined) extra[k] = fbExtra[k];
+        });
         extra.alerta = calcularEstado(extra);
         const idx = allData.findIndex(a => a.id === extra.id);
         if (idx >= 0) allData[idx] = extra;
@@ -1978,8 +1977,9 @@ function guardarActividad() {
   // Calcular estado automático
   nueva.alerta = calcularEstado(nueva);
 
-  // Guardar en Firebase (se sincroniza en todos los navegadores)
-  DB.ref('ungrd/extras/' + id).set(nueva)
+  // Guardar en Firebase: tanto en extras (estructura) como en actividades (sync)
+  DB.ref('ungrd/extras/' + id).set(nueva);
+  DB.ref('ungrd/actividades/' + id).set(nueva)
     .then(() => {
       mostrarToast('✅ Actividad ' + id + ' guardada correctamente', 3000);
     })
