@@ -1160,8 +1160,6 @@ document.addEventListener('DOMContentLoaded', () => {
   cargarDatos(); // muestra datos base inmediatamente, luego Firebase actualiza
 });
 
-let _ultimaEdicion = 0; // timestamp de la última edición local
-
 function cargarDatos() {
   // 1. Cargar datos base inmediatamente
   allData = DATA_EXCEL.map(a => ({
@@ -1173,9 +1171,6 @@ function cargarDatos() {
 
   // 2. Escuchar Firebase en tiempo real
   DB.ref('ungrd').on('value', snap => {
-    // Si hubo edición local en los últimos 3 segundos,
-    // ignorar el disparo del listener (evita sobrescribir con datos viejos)
-    if (Date.now() - _ultimaEdicion < 5000) return;
     const fb     = snap.val() || {};
     const fbActs = fb.actividades || {};
     const idsBase = new Set(DATA_EXCEL.map(d => d.id));
@@ -1355,10 +1350,8 @@ function aplicarFiltros() {
   const tipo   = document.getElementById('filtroTipo').value;
   const alerta = document.getElementById('filtroAlerta').value;
   const semana = parseInt(document.getElementById('filtroSemana').value) || 0;
-  // Normalizar búsqueda: minúsculas y sin tildes
-  const _normBuscar = v => (v||'').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const buscar = _normBuscar(document.getElementById('searchInput').value);
+  const _norm = v => (v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const buscar = _norm(document.getElementById('searchInput').value);
   // Leer checkboxes del dropdown — AND: solo las marcadas
   const clasificaciones = CLASES_KEYS.filter(v => {
     const el = document.getElementById('clas_' + v);
@@ -1388,12 +1381,12 @@ function aplicarFiltros() {
     if (alerta && a.alerta         !== alerta) return false;
     if (semana && a.semana_fin     >  semana)  return false;
     if (buscar && !(
-      _normBuscar(a.id).includes(buscar)          ||
-      _normBuscar(a.descripcion).includes(buscar) ||
-      _normBuscar(a.responsable).includes(buscar) ||
-      _normBuscar(a.grupo).includes(buscar)       ||
-      _normBuscar(a.tema).includes(buscar)        ||
-      _normBuscar(a.entregable).includes(buscar)
+      _norm(a.id).includes(buscar)          ||
+      _norm(a.descripcion).includes(buscar) ||
+      _norm(a.responsable).includes(buscar) ||
+      _norm(a.grupo).includes(buscar)       ||
+      _norm(a.tema).includes(buscar)        ||
+      _norm(a.entregable).includes(buscar)
     )) return false;
    
     // Filtro clasificación:
@@ -2068,7 +2061,6 @@ function confirmarAvance() {
   aplicarFiltros(); // render inmediato con el nuevo valor
 
   // 2. Persistir en Firebase (sincroniza con los demás)
-  _ultimaEdicion = Date.now();
   DB.ref('ungrd/actividades/' + a.id + '/avance').set(val)
     .then(() => mostrarToast('✅ Avance guardado y sincronizado', 2000))
     .catch(() => mostrarToast('⚠️ Guardado local, sin conexión', 2000));
@@ -2302,7 +2294,6 @@ function guardarEdicion() {
   a.alerta = calcularEstado(a);
 
   // Guardar edición completa en Firebase
-  _ultimaEdicion = Date.now(); // marcar edición local en curso
   DB.ref('ungrd/actividades/' + a.id).update({
     descripcion:       a.descripcion,
     entregable:        a.entregable,
@@ -2919,8 +2910,9 @@ function validarGrupoParaGuardar(grupoSeleccionado) {
    salvo que se active el checkbox "Ver archivadas".
    ============================================================ */
 function archivarActividad(actId, archivar) {
-  if (grupoActual !== 'ADMINISTRADOR') {
-    mostrarToast('⚠️ Solo el administrador puede archivar actividades', 3000);
+  // Verificar permisos de administrador
+  if (!usuarioActual || (grupoActual || '').toUpperCase().trim() !== 'ADMINISTRADOR') {
+    mostrarToast('⚠️ Solo el administrador puede archivar. Usuario actual: ' + (grupoActual||'ninguno'), 4000);
     return;
   }
 
@@ -2931,13 +2923,11 @@ function archivarActividad(actId, archivar) {
   const a = allData.find(x => x.id === actId);
   if (a) a.archivada = archivar;
 
+  // Render local inmediato
+  aplicarFiltros();
   // Guardar en Firebase
-  _ultimaEdicion = Date.now(); // evitar que el listener sobreescriba
-  aplicarFiltros(); // render inmediato
   DB.ref('ungrd/actividades/' + actId + '/archivada').set(archivar)
-    .then(() => {
-      mostrarToast(archivar ? '🗃 Actividad archivada' : '♻️ Actividad restaurada', 2500);
-    })
+    .then(() => mostrarToast(archivar ? '🗃 Actividad archivada' : '♻️ Actividad restaurada', 2500))
     .catch(() => mostrarToast('⚠️ Error al guardar', 2000));
 }
 </script>
