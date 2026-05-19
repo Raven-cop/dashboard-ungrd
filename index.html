@@ -1175,7 +1175,7 @@ function cargarDatos() {
   DB.ref('ungrd').on('value', snap => {
     // Si hubo edición local en los últimos 3 segundos,
     // ignorar el disparo del listener (evita sobrescribir con datos viejos)
-    if (Date.now() - _ultimaEdicion < 3000) return;
+    if (Date.now() - _ultimaEdicion < 5000) return;
     const fb     = snap.val() || {};
     const fbActs = fb.actividades || {};
     const idsBase = new Set(DATA_EXCEL.map(d => d.id));
@@ -1355,7 +1355,10 @@ function aplicarFiltros() {
   const tipo   = document.getElementById('filtroTipo').value;
   const alerta = document.getElementById('filtroAlerta').value;
   const semana = parseInt(document.getElementById('filtroSemana').value) || 0;
-  const buscar = document.getElementById('searchInput').value.toLowerCase();
+  // Normalizar búsqueda: minúsculas y sin tildes
+  const _normBuscar = v => (v||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const buscar = _normBuscar(document.getElementById('searchInput').value);
   // Leer checkboxes del dropdown — AND: solo las marcadas
   const clasificaciones = CLASES_KEYS.filter(v => {
     const el = document.getElementById('clas_' + v);
@@ -1385,12 +1388,12 @@ function aplicarFiltros() {
     if (alerta && a.alerta         !== alerta) return false;
     if (semana && a.semana_fin     >  semana)  return false;
     if (buscar && !(
-      a.id.toLowerCase().includes(buscar)          ||
-      a.descripcion.toLowerCase().includes(buscar) ||
-      a.responsable.toLowerCase().includes(buscar) ||
-      a.grupo.toLowerCase().includes(buscar)       ||
-      ((a.tema || '').toLowerCase().includes(buscar)) ||
-      (a.entregable && a.entregable.toLowerCase().includes(buscar))
+      _normBuscar(a.id).includes(buscar)          ||
+      _normBuscar(a.descripcion).includes(buscar) ||
+      _normBuscar(a.responsable).includes(buscar) ||
+      _normBuscar(a.grupo).includes(buscar)       ||
+      _normBuscar(a.tema).includes(buscar)        ||
+      _normBuscar(a.entregable).includes(buscar)
     )) return false;
    
     // Filtro clasificación:
@@ -2929,10 +2932,11 @@ function archivarActividad(actId, archivar) {
   if (a) a.archivada = archivar;
 
   // Guardar en Firebase
+  _ultimaEdicion = Date.now(); // evitar que el listener sobreescriba
+  aplicarFiltros(); // render inmediato
   DB.ref('ungrd/actividades/' + actId + '/archivada').set(archivar)
     .then(() => {
       mostrarToast(archivar ? '🗃 Actividad archivada' : '♻️ Actividad restaurada', 2500);
-      aplicarFiltros();
     })
     .catch(() => mostrarToast('⚠️ Error al guardar', 2000));
 }
