@@ -1225,6 +1225,9 @@ function cargarDatos() {
 
     ocultarToast();
     aplicarFiltros();
+    // Si hay texto en el buscador, re-ejecutar ahora que Firebase cargó
+    const srch = document.getElementById('searchInput');
+    if (srch && srch.value.trim()) aplicarFiltros();
 
   }, () => {
     ocultarToast();
