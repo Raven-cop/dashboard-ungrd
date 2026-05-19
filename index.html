@@ -1200,7 +1200,11 @@ function cargarDatos() {
         // Aplicar cambios de Firebase sobre extras también
         const fbExtra = fbActs[e.id];
         if (fbExtra) {
-          ['avance','responsable','grupo','categorias'].forEach(k => {
+          // Aplicar TODOS los campos editados sobre extras
+          ['descripcion','entregable','tema','responsable','responsable_apoyo',
+           'apoyo','apoyo3','apoyo4','grupo','semana_inicio','semana_fin',
+           'mes_inicio','mes_fin','fecha_inicio','fecha_fin','tipo_actividad',
+           'categorias','avance','archivada'].forEach(k => {
             if (fbExtra[k] !== undefined) extra[k] = fbExtra[k];
           });
         }
