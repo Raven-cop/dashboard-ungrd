@@ -495,6 +495,14 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
 .row-archivada td { opacity:0.45; }
 .archivo-badge { background:#fff3e0; color:#e65100; font-size:9px; font-weight:700;
   padding:1px 5px; border-radius:3px; display:inline-block; }
+
+/* ===== ETIQUETAS ===== */
+.etiq-chip {
+  display:inline-block; font-size:9px; font-weight:700;
+  padding:2px 7px; border-radius:10px; margin:1px;
+  background:#e8ecf5; color:var(--azul);
+  white-space:nowrap;
+}
 /* ===== PRINT ===== */
 /* ===== PRINT ===== */
 @media print {
@@ -904,8 +912,8 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
         </div>
       </div>
       <div class="f-group full">
-        <label>Tema</label>
-        <input type="text" id="fTema" placeholder="Tema o categoría">
+        <label>🏷️ Etiquetas <span style="font-size:10px;color:#888;">(máx. 3 palabras clave, separadas por coma)</span></label>
+        <input type="text" id="fTema" placeholder="Ej: SENDAI, MEGIR, ENRE" maxlength="80" oninput="validarEtiquetas(this)">
       </div>
     </div>
     <div class="modal-acts">
@@ -2955,6 +2963,16 @@ function diagnosticar() {
     'Alerta: ' + (a.alerta||'')
   );
 }
+
+/* Validar que el campo de etiquetas tenga máximo 3 entradas */
+function validarEtiquetas(input) {
+  const parts = input.value.split(',');
+  if (parts.length > 3) {
+    // Truncar a 3
+    input.value = parts.slice(0, 3).join(',');
+    mostrarToast('⚠️ Máximo 3 etiquetas separadas por coma', 2000);
+  }
+}
 </script>
 
 <!-- ═══════════════════════════════════════════════
@@ -2985,8 +3003,8 @@ function diagnosticar() {
         <input type="text" id="eEntregable">
       </div>
       <div class="f-group full">
-        <label>Tema</label>
-        <input type="text" id="eTema">
+        <label>🏷️ Etiquetas <span style="font-size:10px;color:#888;">(máx. 3 palabras clave, separadas por coma)</span></label>
+        <input type="text" id="eTema" placeholder="Ej: SENDAI, MEGIR, ENRE" maxlength="80" oninput="validarEtiquetas(this)">
       </div>
 
       <!-- SECCIÓN: Responsables -->
