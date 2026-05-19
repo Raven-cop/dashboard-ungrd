@@ -739,6 +739,7 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
         </div>
         <input type="text" id="searchInput" class="srch-input" placeholder="🔍 Buscar…" oninput="aplicarFiltros()">
         <button class="btn btn-azul" onclick="exportCSV()">📥 CSV</button>
+        <button class="btn" style="background:#9c27b0;color:#fff;" onclick="diagnosticar()">🔍 Diagnóstico</button>
         <button class="btn" style="background:#1d6f42;color:#fff;" onclick="exportExcel()">📊 Excel</button>
         <button class="btn btn-verde" id="btnAgregar" onclick="abrirModalAgregar()" style="display:none;">➕ Agregar</button>
       </div>
@@ -2933,6 +2934,26 @@ function archivarActividad(actId, archivar) {
   DB.ref('ungrd/actividades/' + actId + '/archivada').set(archivar)
     .then(() => mostrarToast(archivar ? '🗃 Actividad archivada' : '♻️ Actividad restaurada', 2500))
     .catch(() => mostrarToast('⚠️ Error al guardar', 2000));
+}
+
+/* ── Diagnóstico temporal ── */
+function diagnosticar() {
+  const id = prompt('Ingresa el ID de la actividad a revisar (ej: A265):');
+  if (!id) return;
+  const a = allData.find(x => x.id === id.toUpperCase().trim());
+  if (!a) {
+    alert('Actividad ' + id + ' NO encontrada en allData.\nTotal en allData: ' + allData.length);
+    return;
+  }
+  alert(
+    'Actividad: ' + a.id + '\n' +
+    'Descripción: ' + (a.descripcion||'').substring(0,60) + '\n' +
+    'Tema: "' + (a.tema||'') + '"\n' +
+    'Grupo: ' + (a.grupo||'') + '\n' +
+    'Archivada: ' + (a.archivada||false) + '\n' +
+    'Avance: ' + (a.avance||0) + '%\n' +
+    'Alerta: ' + (a.alerta||'')
+  );
 }
 </script>
 
