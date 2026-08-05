@@ -1257,8 +1257,7 @@ function poblarSelectsResponsables() {
 
 function poblarFiltros() {
   // Grupos fijos — no dependen de Firebase para mostrar el modal
-  const GRUPOS_FIJOS = ["ANALISIS DE DATOS", "DA\u00d1OS Y PERDIDAS", "DISE\u00d1O Y DIAGRAMACI\u00d3N", "EVALUACI\u00d3N DE IMPACTO", "GESTION ADMINISTRATIVA", "GESTI\u00d3N JUR\u00cdDICA", "MEGIR", "SEGUIMIENTO AL PNGRD", "SISTEMA DE INFORMACION"];
-  const fGrupo = document.getElementById('fGrupo');
+  const GRUPOS_FIJOS = ["ANALISIS DE DATOS", "DA\u00d1OS Y PERDIDAS", "DISE\u00d1O Y DIAGRAMACI\u00d3N", "EVALUACI\u00d3N DE IMPACTO", "GESTION ADMINISTRATIVA", "GESTI\u00d3N JUR\u00cdDICA", "MEGIR", "SENDAI", "SEGUIMIENTO AL PNGRD", "SISTEMA DE INFORMACION"];  const fGrupo = document.getElementById('fGrupo');
   if (fGrupo && fGrupo.options.length <= 1) {
     GRUPOS_FIJOS.forEach(g => {
       const o = document.createElement('option'); o.value = g; o.textContent = g;
