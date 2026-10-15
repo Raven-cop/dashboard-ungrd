@@ -572,6 +572,7 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
         <span>👤</span><span id="userGrupoLbl"></span><span style="opacity:.7;">· Salir</span>
       </div>
     </div>
+    <button class="btn-pdf" onclick="abrirModalInforme()">📑 Informe</button>
     <button class="btn-pdf" onclick="exportPDF()">📄 Exportar PDF</button>
   </div>
 </header>
@@ -747,7 +748,6 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
         </div>
         <input type="text" id="searchInput" class="srch-input" placeholder="🔍 Buscar…" oninput="aplicarFiltros()">
         <button class="btn btn-azul" onclick="exportCSV()">📥 CSV</button>
-        <button class="btn" style="background:#9c27b0;color:#fff;" onclick="diagnosticar()">🔍 Diagnóstico</button>
         <button class="btn" style="background:#1d6f42;color:#fff;" onclick="exportExcel()">📊 Excel</button>
         <button class="btn btn-verde" id="btnAgregar" onclick="abrirModalAgregar()" style="display:none;">➕ Agregar</button>
       </div>
@@ -761,7 +761,7 @@ body { font-family: 'Nunito Sans', 'Segoe UI', Arial, sans-serif; background: va
             <th onclick="sortBy('grupo')">Grupo ↕</th>
             <th onclick="sortBy('responsable')">Responsable ↕</th>
             <th>Apoyos</th>
-            <th>Semanas (1–48) · Hoy=S14</th>
+            <th id="thSemanas">Semanas (1–48) · Hoy=S14</th>
             <th onclick="sortBy('avance')">Avance ↕</th>
             <th>Clasificación</th>
             <th onclick="sortBy('alerta')">Estado ↕</th>
@@ -980,9 +980,11 @@ const USUARIOS = {
   'danos':     { pass: 'danos2026',    grupo: 'DAÑOS Y PERDIDAS' },
   'diseno':    { pass: 'diseno2026',   grupo: 'DISEÑO Y DIAGRAMACIÓN' },
   'sistemas':  { pass: 'sistemas2026', grupo: 'SISTEMA DE INFORMACION' },
+  'sendai':    { pass: ['SENDAI2026','sendai2026'], grupo: 'SENDAI' },
 };
 let usuarioActual = null;
 let grupoActual   = null;
+let gruposActuales = [];   // grupos que el usuario puede editar
 </script>
 
 <script>
@@ -1034,6 +1036,7 @@ const RESPONSABLES_FIJOS = [
   "EMILFE BAUTISTA",
   "ERIKA LEON",
   "ESTEBAN BERMUDEZ",
+  "FELIPE MORALES",
   "FERNANDO OCAMPO",
   "GERMAN QUINTERO",
   "IVAN SANCHEZ",
@@ -1051,6 +1054,7 @@ const RESPONSABLES_FIJOS = [
   "SEBASTIAN HERNANDEZ",
   "SIPLAG",
   "YADERT CONTRERAS",
+  "YUDY MONTOYA",
   "ZENETH OLIVERO",
   "DIANA MARTINEZ",
   "CESAR VILLAMIL"
@@ -1129,7 +1133,7 @@ const GANTT_CAL = (function() {
 })();
 
 // Semana de inicio del "mes visible" actual en el Gantt (siempre múltiplo de 4 + 1)
-let ganttSemanaInicio = 2; // Empieza en Abril (semanas 13-16)
+let ganttSemanaInicio = Math.max(1, SEMANA_ACTUAL - ((SEMANA_ACTUAL - 1) % 4)); // Empieza en el mes actual
 
 /* ============================================================
    4. CÁLCULO AUTOMÁTICO DE ESTADO
@@ -1344,6 +1348,8 @@ function actualizarHeader() {
   document.getElementById('semanaActualBadge').textContent = '⏱ Semana actual: ' + SEMANA_ACTUAL;
   const btnHoyGantt = document.querySelector('.btn-orange'); 
 if(btnHoyGantt) btnHoyGantt.innerHTML = `⏱ Hoy S${SEMANA_ACTUAL}`;
+  const thSem = document.getElementById('thSemanas');
+  if (thSem) thSem.textContent = 'Semanas (1–48) · Hoy=S' + SEMANA_ACTUAL;
   document.getElementById('ultimaActualizacion').textContent =
     'Actualizado: ' + now.toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'});
 }
@@ -1422,13 +1428,6 @@ function aplicarFiltros() {
         if (catsSel !== catsAct) return false;
       }
     }
-
-    if (buscar && !(
-      a.id.toLowerCase().includes(buscar) ||
-      a.descripcion.toLowerCase().includes(buscar) ||
-      a.responsable.toLowerCase().includes(buscar) ||
-      a.grupo.toLowerCase().includes(buscar)
-    )) return false;
 
     return true;
   });
@@ -2271,6 +2270,8 @@ function guardarEdicion() {
     return;
   }
 
+  const avAnterior = +a.avance || 0;   // para registrar historial si cambia
+
   // Aplicar cambios al objeto en memoria
   a.descripcion       = document.getElementById('eDesc').value.trim()        || a.descripcion;
   a.entregable        = document.getElementById('eEntregable').value.trim()  || a.entregable;
@@ -2330,6 +2331,18 @@ function guardarEdicion() {
     avance:            avance,
     editado:           new Date().toLocaleString('es-CO'),
   });
+  // Si el avance cambió desde Editar, también queda en el historial (lo usa el informe)
+  if (avance !== avAnterior) {
+    DB.ref('ungrd/historial/' + a.id).once('value', snap => {
+      const hist = snap.val() || [];
+      hist.push({
+        fecha: new Date().toLocaleDateString('es-CO'),
+        hora:  new Date().toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'}),
+        valor: avance
+      });
+      DB.ref('ungrd/historial/' + a.id).set(hist);
+    });
+  }
   // Render inmediato local
   cerrarModal('modalEditar');
   aplicarFiltros();
@@ -2849,14 +2862,15 @@ function hacerLogin() {
     return;
   }
   const datos = USUARIOS[user];
-  if (!datos || datos.pass !== pass) {
+  if (!datos || ![].concat(datos.pass).includes(pass)) {
     if (errEl) errEl.textContent = 'Usuario o contraseña incorrectos.';
     if (document.getElementById('loginPass')) document.getElementById('loginPass').value = '';
     return;
   }
 
-  usuarioActual = user;
-  grupoActual   = datos.grupo;
+  usuarioActual  = user;
+  gruposActuales = datos.grupos || [datos.grupo];
+  grupoActual    = datos.grupo || gruposActuales.join(' · ');
 
   const overlay = document.getElementById('loginOverlay');
   if (overlay) overlay.style.display = 'none';
@@ -2875,6 +2889,7 @@ function hacerLogin() {
 function entrarSoloVer() {
   usuarioActual = null;
   grupoActual   = null;
+  gruposActuales = [];
   const overlay = document.getElementById('loginOverlay');
   if (overlay) overlay.style.display = 'none';
   aplicarFiltros();
@@ -2883,6 +2898,7 @@ function entrarSoloVer() {
 function cerrarSesion() {
   usuarioActual = null;
   grupoActual   = null;
+  gruposActuales = [];
   const badge  = document.getElementById('userBadge');
   const btnAgr = document.getElementById('btnAgregar');
   const overlay = document.getElementById('loginOverlay');
@@ -2902,7 +2918,7 @@ function cerrarSesion() {
 function puedeEditar(actividad) {
   if (!usuarioActual) return false;
   if (grupoActual === 'ADMINISTRADOR') return true;
-  return actividad.grupo === grupoActual;
+  return gruposActuales.includes(actividad.grupo);
 }
 
 /* Validar al guardar actividad nueva */
@@ -2911,7 +2927,7 @@ function validarGrupoParaGuardar(grupoSeleccionado) {
     alert('⚠️ Debes iniciar sesión para agregar actividades.');
     return false;
   }
-  if (grupoActual !== 'ADMINISTRADOR' && grupoSeleccionado !== grupoActual) {
+  if (grupoActual !== 'ADMINISTRADOR' && !gruposActuales.includes(grupoSeleccionado)) {
     alert('⚠️ Solo puedes agregar actividades de tu grupo:\n' + grupoActual + '\n\nGrupo seleccionado: ' + grupoSeleccionado);
     return false;
   }
@@ -3024,11 +3040,11 @@ function validarEtiquetas(input) {
         <label>👤 Apoyo adicional</label>
         <select id="eApoyo"></select>
       </div>
-            <div class="f-group">                           /* <!--------------------------------------NUEVO -->*/
+            <div class="f-group">  <!--------------------------------------NUEVO -->
         <label>👤 Apoyo adicional</label>
         <select id="eApoyo3"></select>
       </div>
-      <div class="f-group">                            /* <!--------------------------------------NUEVO -->*/
+      <div class="f-group">  <!--------------------------------------NUEVO -->
         <label>👤 Apoyo adicional</label>
         <select id="eApoyo4"></select>
       </div>
@@ -3037,24 +3053,24 @@ function validarEtiquetas(input) {
         <select id="eGrupo"></select>
       </div>
 
-      <!-- SECCIÓN: Tiempos -->                             /* <!--------------------------------------NUEVO -->*/
+      <!-- SECCIÓN: Tiempos -->  <!--------------------------------------NUEVO -->
       <div class="edit-section-hdr">📅 Semanas de ejecución</div>
 <div class="f-group">
-      <label>📅 Fecha Inicio</label>                                       /* <!--------------------------------------NUEVO -->*/
+      <label>📅 Fecha Inicio</label>  <!--------------------------------------NUEVO -->
       <input type="date" id="eFechaInicio" onchange="document.getElementById('eSemIni').value = obtenerNumeroSemana(this.value)">
     </div>
 
-    <div class="f-group">                       /* <!--------------------------------------NUEVO -->*/
+    <div class="f-group">  <!--------------------------------------NUEVO -->
       <label>📅 Fecha Fin</label>
       <input type="date" id="eFechaFin" onchange="document.getElementById('eSemFin').value = obtenerNumeroSemana(this.value)">
     </div>
 
-    <div class="f-group">                       /* <!--------------------------------------NUEVO -->*/
+    <div class="f-group">  <!--------------------------------------NUEVO -->
       <label>Semana Inicio (Auto)</label>
       <input type="number" id="eSemIni" min="0" max="48" readonly style="background:#f0f2f5; font-weight:bold;">
     </div>
 
-    <div class="f-group">                       /* <!--------------------------------------NUEVO -->*/
+    <div class="f-group">  <!--------------------------------------NUEVO -->
       <label>Semana Fin (Auto)</label>
       <input type="number" id="eSemFin" min="0" max="48" readonly style="background:#f0f2f5; font-weight:bold;">
     </div>
@@ -3111,6 +3127,562 @@ function validarEtiquetas(input) {
     </div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL – INFORME DE ACTIVIDADES (anexo cuenta de cobro)
+══════════════════════════════════════════════════ -->
+<style>
+.inf-modal { width:980px; }
+.inf-grid3 { display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px; }
+.inf-sec   { font-size:12px; font-weight:900; color:var(--azul); text-transform:uppercase; letter-spacing:.4px; margin:18px 0 8px; padding-top:12px; border-top:1px solid var(--border); }
+.inf-hint  { font-size:11px; color:var(--txt-sub); font-weight:400; text-transform:none; letter-spacing:0; }
+.inf-tabla-wrap { max-height:320px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; }
+.inf-tabla { width:100%; border-collapse:collapse; font-size:12px; }
+.inf-tabla th { position:sticky; top:0; background:var(--azul); color:#fff; text-align:left; padding:7px 8px; font-size:11px; z-index:1; }
+.inf-tabla td { padding:6px 8px; border-bottom:1px solid #eef0f3; vertical-align:middle; }
+.inf-tabla tr.excl td { opacity:.45; }
+.inf-tabla select { width:100%; border:1px solid var(--border); border-radius:5px; padding:4px 6px; font-size:12px; font-family:inherit; }
+.inf-rol { display:inline-block; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px; background:#e8edf7; color:var(--azul); white-space:nowrap; }
+.inf-rol.apoyo { background:#fff6d6; color:#7a5c00; }
+.inf-vacio { text-align:center; color:#999; padding:22px; }
+@media (max-width:760px){ .inf-grid3 { grid-template-columns:1fr; } }
+</style>
+
+<div class="modal-ov" id="modalInforme">
+  <div class="modal inf-modal">
+    <button class="btn-close" onclick="cerrarModal('modalInforme')">✕</button>
+    <div class="modal-ttl">Informe de actividades por persona</div>
+
+    <div class="inf-grid3">
+      <div class="f-group">
+        <label>Persona</label>
+        <select id="infPersona" onchange="infCambiarPersona()"><option value="">— Selecciona —</option></select>
+      </div>
+      <div class="f-group">
+        <label>Desde</label>
+        <input type="date" id="infDesde" onchange="infRenderTabla()">
+      </div>
+      <div class="f-group">
+        <label>Hasta</label>
+        <input type="date" id="infHasta" onchange="infRenderTabla()">
+      </div>
+    </div>
+
+    <div class="inf-sec">Datos del contrato <span class="inf-hint">— se guardan para la próxima vez</span></div>
+    <div class="f-grid">
+      <div class="f-group">
+        <label>Número de contrato</label>
+        <input type="text" id="infContrato" placeholder="Ej: UNGRD-030-2026">
+      </div>
+      <div class="f-group">
+        <label>Supervisor(a)</label>
+        <input type="text" id="infSupervisor" placeholder="Nombre completo">
+      </div>
+      <div class="f-group full">
+        <label>Objeto del contrato (opcional)</label>
+        <textarea id="infObjeto" rows="2"></textarea>
+      </div>
+      <div class="f-group full">
+        <label>Obligaciones específicas <span class="inf-hint">— una por línea, en el orden del contrato</span></label>
+        <textarea id="infObligaciones" rows="5" onchange="infLeerObligaciones(); infRenderTabla();"></textarea>
+      </div>
+    </div>
+
+    <div class="inf-sec">Actividades del periodo <span class="inf-hint" id="infResumen"></span></div>
+    <div class="inf-tabla-wrap">
+      <table class="inf-tabla">
+        <thead><tr><th style="width:34px;">Incl.</th><th style="width:56px;">ID</th><th>Actividad</th><th style="width:110px;">Rol</th><th style="width:70px;">Avance</th><th style="width:250px;">Obligación</th></tr></thead>
+        <tbody id="infTbody"><tr><td colspan="6" class="inf-vacio">Selecciona una persona</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="modal-acts">
+      <button class="btn-cancel" onclick="cerrarModal('modalInforme')">Cerrar</button>
+      <button class="btn-cancel" onclick="infGuardarConfig(true)">Guardar</button>
+      <button class="btn-save" onclick="infGenerar()">Generar informe</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   INFORME DE ACTIVIDADES POR PERSONA
+   - Configuración por persona en Firebase: ungrd/informes/{persona}
+     { contrato, supervisor, objeto, obligaciones:[...], mapa:{actId: índice} }
+   - El avance del periodo se calcula con ungrd/historial
+   ============================================================ */
+let infCfg       = { contrato:'', supervisor:'', objeto:'', obligaciones:[], mapa:{} };
+let infHist      = null;          // historial completo (se carga al abrir)
+let infExcluidas = new Set();     // actividades desmarcadas (solo esta sesión)
+
+const INF_ESTADO_COLOR = {
+  'FINALIZADA':     '#217a3e',
+  'EN SEGUIMIENTO': '#2d4a8a',
+  'RIESGO MENSUAL': '#e8730a',
+  'ATRASADA':       '#d80e25',
+  'SIN MOVIMIENTO': '#8a8a89'
+};
+
+function _infKey(p) { return String(p).replace(/[.#$\[\]\/]/g, '_'); }
+function _infIso(d) { const z = n => String(n).padStart(2,'0'); return d.getFullYear() + '-' + z(d.getMonth()+1) + '-' + z(d.getDate()); }
+function _infFechaTxt(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' });
+}
+function _infParseFecha(f) {           // 'd/m/aaaa' (es-CO)
+  const m = String(f||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? new Date(+m[3], +m[2]-1, +m[1], 12) : null;
+}
+
+function abrirModalInforme() {
+  // Personas: lista fija + las que aparecen en los datos
+  const sel = document.getElementById('infPersona');
+  const set = new Set(RESPONSABLES_FIJOS.filter(r => r !== 'POR ASIGNAR'));
+  allData.forEach(a => ['responsable','responsable_apoyo','apoyo','apoyo3','apoyo4'].forEach(k => {
+    if (a[k] && a[k] !== 'POR ASIGNAR') set.add(a[k]);
+  }));
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">— Selecciona —</option>' +
+    [...set].sort((x,y) => x.localeCompare(y, 'es')).map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  if (actual) sel.value = actual;
+
+  // Periodo por defecto: 24 del mes anterior al 23 del mes actual (o siguiente)
+  if (!document.getElementById('infDesde').value) {
+    const hoy = new Date();
+    let ini = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 24);
+    if (hoy.getDate() >= 24) ini = new Date(hoy.getFullYear(), hoy.getMonth(), 24);
+    const fin = new Date(ini.getFullYear(), ini.getMonth() + 1, 23);
+    document.getElementById('infDesde').value = _infIso(ini);
+    document.getElementById('infHasta').value = _infIso(fin);
+  }
+
+  abrirModal('modalInforme');
+
+  // Historial completo (para el avance en el periodo)
+  DB.ref('ungrd/historial').once('value')
+    .then(snap => { infHist = snap.val() || {}; infRenderTabla(); })
+    .catch(() => { infHist = {}; infRenderTabla(); });
+  infRenderTabla();
+}
+
+function infCambiarPersona() {
+  const p = document.getElementById('infPersona').value;
+  infExcluidas = new Set();
+  infCfg = { contrato:'', supervisor:'', objeto:'', obligaciones:[], mapa:{} };
+  infPintarConfig();
+  infRenderTabla();
+  if (!p) return;
+  DB.ref('ungrd/informes/' + _infKey(p)).once('value').then(snap => {
+    if (document.getElementById('infPersona').value !== p) return;
+    const v = snap.val() || {};
+    infCfg = {
+      contrato:     v.contrato   || '',
+      supervisor:   v.supervisor || '',
+      objeto:       v.objeto     || '',
+      obligaciones: Array.isArray(v.obligaciones) ? v.obligaciones : Object.values(v.obligaciones || {}),
+      mapa:         v.mapa || {}
+    };
+    infPintarConfig();
+    infRenderTabla();
+  }).catch(() => {});
+}
+
+function infPintarConfig() {
+  document.getElementById('infContrato').value     = infCfg.contrato;
+  document.getElementById('infSupervisor').value   = infCfg.supervisor;
+  document.getElementById('infObjeto').value       = infCfg.objeto;
+  document.getElementById('infObligaciones').value = infCfg.obligaciones.join('\n');
+}
+
+function infLeerObligaciones() {
+  infCfg.obligaciones = document.getElementById('infObligaciones').value
+    .split('\n')
+    .map(l => l.replace(/^\s*(obligaci[oó]n\s*)?\d+\s*[\.\)\-:]\s*/i, '').trim())
+    .filter(Boolean);
+}
+
+function infLeerCampos() {
+  infCfg.contrato   = document.getElementById('infContrato').value.trim();
+  infCfg.supervisor = document.getElementById('infSupervisor').value.trim();
+  infCfg.objeto     = document.getElementById('infObjeto').value.trim();
+  infLeerObligaciones();
+}
+
+function infGuardarConfig(avisar) {
+  const p = document.getElementById('infPersona').value;
+  if (!p) return Promise.resolve();
+  infLeerCampos();
+  return DB.ref('ungrd/informes/' + _infKey(p)).set(infCfg)
+    .then(() => { if (avisar) mostrarToast('Configuración del informe guardada', 2000); })
+    .catch(() => { if (avisar) mostrarToast('No se pudo guardar (sin conexión)', 2500); });
+}
+
+/* Rol de la persona en una actividad */
+function _infRol(a, p) {
+  if (a.responsable === p)       return 'Responsable';
+  if (a.responsable_apoyo === p) return 'Responsable de apoyo';
+  if (a.apoyo === p || a.apoyo3 === p || a.apoyo4 === p) return 'Apoyo';
+  return null;
+}
+
+/* Actividades de la persona en el periodo, con avance inicial y final */
+function infActividades(p, desde, hasta) {
+  if (!p || !desde || !hasta) return [];
+  const dIni = new Date(desde + 'T00:00:00');
+  const dFin = new Date(hasta + 'T23:59:59');
+  const sD = obtenerNumeroSemana(desde), sH = obtenerNumeroSemana(hasta);
+  const baseMap = {}; DATA_EXCEL.forEach(d => { baseMap[d.id] = d; });
+
+  return allData.filter(a => !a.archivada).map(a => {
+    const rol = _infRol(a, p);
+    if (!rol) return null;
+    const h   = (infHist && infHist[a.id]) || [];
+    const pts = (Array.isArray(h) ? h : Object.values(h))
+      .map(x => ({ t: _infParseFecha(x && x.fecha), v: +(x && x.valor) || 0 }))
+      .filter(x => x.t).sort((x, y) => x.t - y.t);
+    const enPeriodo = pts.filter(x => x.t >= dIni && x.t <= dFin);
+
+    const si = +a.semana_inicio || 0, sf = +a.semana_fin || 0;
+    const solapa = (si || sf) ? ((si || 1) <= sH && (sf || 48) >= sD) : false;
+    const permanente = a.tipo_actividad === 'PERMANENTE';
+    if (!solapa && !permanente && !enPeriodo.length) return null;
+
+    const actual = +a.avance || 0;
+    let avIni, avFin;
+    if (!pts.length) {
+      avIni = avFin = actual;
+    } else {
+      const antes = pts.filter(x => x.t < dIni);
+      const base  = baseMap[a.id] ? (+baseMap[a.id].avance || 0) : 0;
+      avIni = antes.length ? antes[antes.length - 1].v : base;
+      const alCierre = pts.filter(x => x.t <= dFin);
+      avFin = alCierre.length ? alCierre[alCierre.length - 1].v : avIni;
+    }
+    return { a, rol, avIni, avFin, registros: enPeriodo.length };
+  }).filter(Boolean).sort((x, y) => String(x.a.id).localeCompare(String(y.a.id), 'es', { numeric:true }));
+}
+
+function infRenderTabla() {
+  const tbody = document.getElementById('infTbody');
+  const p     = document.getElementById('infPersona').value;
+  const desde = document.getElementById('infDesde').value;
+  const hasta = document.getElementById('infHasta').value;
+  const res   = document.getElementById('infResumen');
+  if (!p) { tbody.innerHTML = '<tr><td colspan="6" class="inf-vacio">Selecciona una persona</td></tr>'; res.textContent = ''; return; }
+  if (!desde || !hasta || desde > hasta) { tbody.innerHTML = '<tr><td colspan="6" class="inf-vacio">Revisa el rango de fechas</td></tr>'; res.textContent = ''; return; }
+
+  const filas = infActividades(p, desde, hasta);
+  res.textContent = '— ' + filas.length + ' actividad' + (filas.length === 1 ? '' : 'es') + (infHist ? '' : ' · cargando historial…');
+  if (!filas.length) { tbody.innerHTML = '<tr><td colspan="6" class="inf-vacio">Sin actividades para esta persona en el periodo</td></tr>'; return; }
+
+  const opts = infCfg.obligaciones.map((o, i) =>
+    `<option value="${i}">${i + 1}. ${esc(o.length > 70 ? o.slice(0, 70) + '…' : o)}</option>`).join('');
+
+  tbody.innerHTML = filas.map(f => {
+    const id   = f.a.id;
+    const excl = infExcluidas.has(id);
+    const val  = infCfg.mapa[id];
+    const desc = String(f.a.descripcion || '');
+    return `<tr class="${excl ? 'excl' : ''}" data-id="${esc(id)}">
+      <td><input type="checkbox" ${excl ? '' : 'checked'} onchange="infToggle(this)"></td>
+      <td><strong>${esc(id)}</strong></td>
+      <td title="${esc(desc)}">${esc(desc.length > 90 ? desc.slice(0, 90) + '…' : desc)}</td>
+      <td><span class="inf-rol ${f.rol === 'Apoyo' ? 'apoyo' : ''}">${f.rol}</span></td>
+      <td>${f.avFin}%</td>
+      <td>${infCfg.obligaciones.length
+        ? `<select onchange="infAsignar(this)"><option value="">— Sin asignar —</option>${opts}</select>`
+        : '<span class="inf-hint">Escribe las obligaciones arriba</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  // Seleccionar la obligación guardada
+  tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+    const s = tr.querySelector('select');
+    const v = infCfg.mapa[tr.dataset.id];
+    if (s && v !== undefined && v !== null && v !== '' && +v < infCfg.obligaciones.length) s.value = String(v);
+  });
+}
+
+function infToggle(chk) {
+  const tr = chk.closest('tr'); const id = tr.dataset.id;
+  if (chk.checked) infExcluidas.delete(id); else infExcluidas.add(id);
+  tr.classList.toggle('excl', !chk.checked);
+}
+
+function infAsignar(sel) {
+  const id = sel.closest('tr').dataset.id;
+  if (sel.value === '') delete infCfg.mapa[id]; else infCfg.mapa[id] = +sel.value;
+}
+
+/* ── Gráficas SVG para el informe ── */
+function _infDona(conteo, total) {
+  const r = 52, C = 2 * Math.PI * r;
+  let acc = 0, arcos = '';
+  Object.keys(INF_ESTADO_COLOR).forEach(k => {
+    const n = conteo[k] || 0; if (!n) return;
+    const len = C * n / total;
+    arcos += `<circle r="${r}" cx="70" cy="70" fill="none" stroke="${INF_ESTADO_COLOR[k]}" stroke-width="22"
+      stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 70 70)"/>`;
+    acc += len;
+  });
+  const leyenda = Object.keys(INF_ESTADO_COLOR).filter(k => conteo[k]).map(k =>
+    `<div class="lg"><span style="background:${INF_ESTADO_COLOR[k]}"></span>${k.charAt(0) + k.slice(1).toLowerCase()}<b>${conteo[k]}</b></div>`).join('');
+  return `<div class="dona"><svg viewBox="0 0 140 140" width="140" height="140">
+      <circle r="${r}" cx="70" cy="70" fill="none" stroke="#eef0f3" stroke-width="22"/>${arcos}
+      <text x="70" y="68" text-anchor="middle" class="dn">${total}</text>
+      <text x="70" y="86" text-anchor="middle" class="dl">actividades</text></svg>
+    <div class="leyenda">${leyenda}</div></div>`;
+}
+
+function _infBarras(grupos) {
+  return grupos.map(g => `
+    <div class="bar-row">
+      <div class="bar-lbl">${esc(g.lbl)}</div>
+      <div class="bar-track">
+        <div class="bar-fin" style="width:${g.fin}%"></div>
+        <div class="bar-ini" style="width:${g.ini}%"></div>
+      </div>
+      <div class="bar-val">${g.fin}%${g.fin > g.ini ? ` <small>(+${g.fin - g.ini})</small>` : ''}</div>
+    </div>`).join('');
+}
+
+/* ── Generar informe en una ventana nueva lista para imprimir/guardar PDF ── */
+function infGenerar() {
+  const p     = document.getElementById('infPersona').value;
+  const desde = document.getElementById('infDesde').value;
+  const hasta = document.getElementById('infHasta').value;
+  if (!p) { mostrarToast('Selecciona una persona', 2000); return; }
+  if (!desde || !hasta || desde > hasta) { mostrarToast('Revisa el rango de fechas', 2000); return; }
+
+  const win = window.open('', '_blank');
+  if (!win) { mostrarToast('El navegador bloqueó la ventana emergente. Permítela para este sitio.', 4000); return; }
+  win.document.write('<p style="font-family:sans-serif;padding:30px;color:#555;">Generando informe…</p>');
+
+  infGuardarConfig(false);
+  const listo = infHist ? Promise.resolve() :
+    DB.ref('ungrd/historial').once('value').then(s => { infHist = s.val() || {}; }).catch(() => { infHist = {}; });
+
+  listo.then(() => {
+    const filas = infActividades(p, desde, hasta).filter(f => !infExcluidas.has(f.a.id));
+    win.document.open();
+    win.document.write(infHTML(p, desde, hasta, filas));
+    win.document.close();
+  });
+}
+
+function infHTML(p, desde, hasta, filas) {
+  const logo  = (document.getElementById('logoUNGRD') || {}).src || '';
+  const obls  = infCfg.obligaciones;
+  const total = filas.length;
+  const conteo = {}; filas.forEach(f => { conteo[f.a.alerta] = (conteo[f.a.alerta] || 0) + 1; });
+  const prom  = arr => arr.length ? Math.round(arr.reduce((s, x) => s + x, 0) / arr.length) : 0;
+  const avFin = prom(filas.map(f => f.avFin));
+  const avIni = prom(filas.map(f => f.avIni));
+  const conMov = filas.filter(f => f.avFin > f.avIni).length;
+  const grupos = [...new Set(filas.map(f => f.a.grupo).filter(Boolean))];
+  const generado = new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' });
+
+  // Secciones: una por obligación + "otras" sin asignar
+  const secciones = obls.map((o, i) => ({ titulo: 'Obligación ' + (i + 1), texto: o,
+    filas: filas.filter(f => +infCfg.mapa[f.a.id] === i && infCfg.mapa[f.a.id] !== undefined) }));
+  const sinAsignar = filas.filter(f => {
+    const v = infCfg.mapa[f.a.id];
+    return v === undefined || v === null || v === '' || +v >= obls.length;
+  });
+  if (sinAsignar.length) secciones.push({ titulo: obls.length ? 'Otras actividades' : 'Actividades del periodo', texto: '', filas: sinAsignar });
+
+  // Barras: por obligación si existen, si no por grupo
+  const barras = obls.length
+    ? secciones.filter(s => s.filas.length).map(s => ({
+        lbl: s.titulo.replace('Obligación', 'Obl.').replace('Otras actividades', 'Otras').replace('Actividades del periodo', 'Todas'), ini: prom(s.filas.map(f => f.avIni)), fin: prom(s.filas.map(f => f.avFin)) }))
+    : grupos.map(g => { const fs = filas.filter(f => f.a.grupo === g);
+        return { lbl: g, ini: prom(fs.map(f => f.avIni)), fin: prom(fs.map(f => f.avFin)) }; });
+
+  const filaHTML = f => {
+    const a = f.a, col = INF_ESTADO_COLOR[a.alerta] || '#8a8a89';
+    const delta = f.avFin - f.avIni;
+    return `<tr>
+      <td class="c-id">${esc(a.id)}</td>
+      <td class="c-act"><div class="desc">${esc(a.descripcion)}</div>
+        ${a.entregable ? `<div class="ent"><b>Entregable:</b> ${esc(a.entregable)}</div>` : ''}</td>
+      <td class="c-rol">${f.rol}</td>
+      <td class="c-av">
+        <div class="mini"><div class="mini-fin" style="width:${f.avFin}%"></div><div class="mini-ini" style="width:${f.avIni}%"></div></div>
+        <div class="av-txt">${f.avIni === f.avFin ? f.avFin + '%' : f.avIni + '% → ' + f.avFin + '%'}${delta > 0 ? ` <span class="up">+${delta}</span>` : ''}</div>
+      </td>
+      <td class="c-est"><span class="est" style="color:${col};border-color:${col}">${esc((a.alerta || '').charAt(0) + (a.alerta || '').slice(1).toLowerCase())}</span></td>
+    </tr>`;
+  };
+
+  const seccionesHTML = secciones.map(s => `
+    <section class="obl">
+      <div class="obl-hdr"><span class="obl-num">${esc(s.titulo)}</span>${s.texto ? `<span class="obl-txt">${esc(s.texto)}</span>` : ''}</div>
+      ${s.filas.length ? `<table class="tb">
+        <thead><tr><th>ID</th><th>Actividad</th><th>Rol</th><th>Avance en el periodo</th><th>Estado</th></tr></thead>
+        <tbody>${s.filas.map(filaHTML).join('')}</tbody></table>`
+      : '<div class="sin">Sin actividades del tablero asociadas en el periodo.</div>'}
+    </section>`).join('');
+
+  // Cronograma (48 semanas: 4 por mes) con la franja del periodo
+  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const sD = obtenerNumeroSemana(desde), sH = obtenerNumeroSemana(hasta);
+  const pct = w => (w / 48 * 100).toFixed(3) + '%';
+  const cronoFilas = filas.map(f => {
+    const a = f.a, col = INF_ESTADO_COLOR[a.alerta] || '#8a8a89';
+    let si = +a.semana_inicio || 0, sf = +a.semana_fin || 0;
+    const perm = a.tipo_actividad === 'PERMANENTE';
+    if (!si && !sf && perm) { si = 1; sf = 48; }
+    if (si && !sf) sf = si; if (sf && !si) si = sf;
+    const barra = si
+      ? `<div class="gt-bar${perm ? ' perm' : ''}" style="left:${pct(si - 1)};width:${pct(sf - si + 1)};background:${col}"></div>`
+      : '<span class="gt-sin">Sin fechas</span>';
+    const d = String(a.descripcion || '');
+    return `<div class="gt-row"><div class="gt-lbl"><b>${esc(a.id)}</b> ${esc(d)}</div>
+      <div class="gt-tl">${barra}</div><div class="gt-sem">${si ? 'S' + si + (sf !== si ? '–S' + sf : '') : ''}</div></div>`;
+  }).join('');
+  const cronoHTML = filas.length ? `
+    <h2>Cronograma de actividades</h2>
+    <div class="gt">
+      <div class="gt-row gt-head"><div class="gt-lbl"></div>
+        <div class="gt-tl">${MESES.map((m, i) => `<span style="left:${pct(i * 4)};width:${pct(4)}">${m}</span>`).join('')}</div><div class="gt-sem"></div></div>
+      <div class="gt-body">
+        <div class="gt-grid">${MESES.map((m, i) => `<i style="left:${pct(i * 4)}"></i>`).join('')}
+          <div class="gt-per" style="left:${pct(sD - 1)};width:${pct(Math.max(1, sH - sD + 1))}"></div></div>
+        ${cronoFilas}
+      </div>
+      <div class="nota-graf"><span><i style="background:#ffcd00;opacity:.45"></i>Periodo del informe (S${sD}–S${sH})</span>
+        ${Object.keys(INF_ESTADO_COLOR).filter(k => conteo[k]).map(k => `<span><i style="background:${INF_ESTADO_COLOR[k]}"></i>${k.charAt(0) + k.slice(1).toLowerCase()}</span>`).join('')}</div>
+    </div>` : '';
+
+  const nombreArchivo = ('Informe_actividades_' + p + '_' + desde + '_a_' + hasta).replace(/[^\wÁÉÍÓÚÑáéíóúñ\-]+/g, '_');
+  const pieIzq = ('UNGRD · Informe de actividades · ' + p).replace(/["\\]/g, '');
+
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>${esc(nombreArchivo)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+@page { size: letter; margin: 14mm 14mm 16mm;
+  @bottom-left  { content: "${pieIzq}"; font: 7.5pt 'Nunito Sans', Arial, sans-serif; color:#8a8a89; }
+  @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 7.5pt 'Nunito Sans', Arial, sans-serif; color:#8a8a89; } }
+* { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+body { font-family:'Nunito Sans', Arial, sans-serif; color:#222; font-size:9.5pt; background:#e9ebef; }
+.hoja { width:216mm; margin:16px auto; background:#fff; padding:14mm; box-shadow:0 4px 24px rgba(0,0,0,.12); }
+.barra-acc { position:sticky; top:0; z-index:5; background:#213362; color:#fff; display:flex; gap:12px; align-items:center; justify-content:center; padding:10px; font-size:13px; }
+.barra-acc button { background:#ffcd00; color:#213362; border:none; border-radius:6px; padding:8px 18px; font-weight:800; font-family:inherit; font-size:13px; cursor:pointer; }
+.barra-acc span { opacity:.8; }
+@media print { body { background:#fff; } .hoja { width:auto; margin:0; padding:0; box-shadow:none; } .barra-acc { display:none; } }
+
+.cab { background:#22335f; border-radius:6px 6px 0 0; display:flex; align-items:center; justify-content:space-between; padding:10px 16px; }
+.cab img { height:46px; }
+.cab .ttl { color:#fff; text-align:right; }
+.cab .ttl b { display:block; font-size:14pt; font-weight:900; letter-spacing:.3px; }
+.cab .ttl span { font-size:8.5pt; opacity:.85; }
+.tricolor { display:flex; height:4px; margin-bottom:14px; }
+.tricolor i { flex:2; background:#ffcd00; } .tricolor i+i { flex:1; background:#2d4a8a; } .tricolor i+i+i { flex:1; background:#d80e25; }
+
+.datos { display:grid; grid-template-columns:1fr 1fr; border:1px solid #dfe3ea; border-radius:6px; overflow:hidden; margin-bottom:14px; }
+.datos div { padding:6px 10px; border-bottom:1px solid #eef0f3; font-size:9pt; }
+.datos div:nth-child(odd) { border-right:1px solid #eef0f3; }
+.datos label { display:block; font-size:7pt; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:#8a8a89; }
+.datos .full { grid-column:1/-1; border-right:none !important; }
+
+h2 { font-size:10.5pt; font-weight:900; color:#213362; text-transform:uppercase; letter-spacing:.5px; margin:4px 0 8px; padding-bottom:4px; border-bottom:2px solid #ffcd00; }
+.kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:12px; }
+.kpi { border:1px solid #dfe3ea; border-top:3px solid #213362; border-radius:6px; padding:8px 10px; }
+.kpi b { display:block; font-size:17pt; font-weight:900; color:#213362; line-height:1.1; }
+.kpi span { font-size:7.5pt; color:#575756; font-weight:700; }
+.graf { display:grid; grid-template-columns:1fr 1.25fr; gap:12px; margin-bottom:16px; break-inside:avoid; }
+.caja { border:1px solid #dfe3ea; border-radius:6px; padding:10px 12px; }
+.caja h3 { font-size:8pt; font-weight:800; color:#575756; text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
+.dona { display:flex; align-items:center; gap:12px; }
+.dona .dn { font-size:24px; font-weight:900; fill:#213362; font-family:'Nunito Sans', Arial; }
+.dona .dl { font-size:9px; fill:#8a8a89; font-family:'Nunito Sans', Arial; }
+.leyenda .lg { display:flex; align-items:center; gap:6px; font-size:8.5pt; margin:3px 0; }
+.leyenda .lg span { width:9px; height:9px; border-radius:2px; display:inline-block; }
+.leyenda .lg b { margin-left:auto; padding-left:10px; color:#213362; }
+.bar-row { display:grid; grid-template-columns:70px 1fr 62px; align-items:center; gap:8px; margin:6px 0; font-size:8.5pt; }
+.bar-lbl { font-weight:700; color:#575756; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bar-track, .mini { position:relative; height:10px; background:#eef0f3; border-radius:5px; overflow:hidden; }
+.bar-fin, .mini-fin { position:absolute; inset:0 auto 0 0; background:#213362; border-radius:5px; }
+.bar-ini, .mini-ini { position:absolute; inset:0 auto 0 0; background:#9fb0d6; border-radius:5px 0 0 5px; }
+.bar-val { font-weight:800; color:#213362; text-align:right; }
+.bar-val small, .up { color:#217a3e; font-weight:800; }
+.nota-graf { font-size:7.5pt; color:#8a8a89; margin-top:6px; display:flex; gap:12px; }
+.nota-graf i { display:inline-block; width:9px; height:9px; border-radius:2px; vertical-align:-1px; margin-right:4px; }
+
+.obl { margin-bottom:14px; }
+.obl-hdr { display:flex; gap:10px; align-items:flex-start; background:#f3f5f9; border-left:4px solid #ffcd00; padding:7px 10px; margin-bottom:6px; break-after:avoid; }
+.obl-num { font-weight:900; color:#213362; white-space:nowrap; font-size:9.5pt; }
+.obl-txt { font-size:8.5pt; color:#444; line-height:1.4; }
+.tb { width:100%; border-collapse:collapse; }
+.tb thead { display:table-header-group; }
+.tb th { background:#213362; color:#fff; font-size:7.5pt; font-weight:800; text-transform:uppercase; letter-spacing:.3px; text-align:left; padding:5px 7px; }
+.tb td { padding:6px 7px; border-bottom:1px solid #eef0f3; vertical-align:top; font-size:8.5pt; }
+.tb tr { break-inside:avoid; }
+.c-id { width:44px; font-weight:800; color:#213362; }
+.c-act .desc { line-height:1.35; }
+.c-act .ent { font-size:7.8pt; color:#575756; margin-top:3px; }
+.c-rol { width:78px; font-size:8pt; color:#575756; }
+.c-av { width:118px; } .c-av .mini { height:7px; margin-top:3px; } .av-txt { font-size:8pt; font-weight:700; margin-top:3px; }
+.c-est { width:84px; }
+.est { display:inline-block; border:1px solid; border-radius:10px; padding:1px 7px; font-size:7.5pt; font-weight:800; white-space:nowrap; }
+.sin { font-size:8.5pt; color:#8a8a89; padding:4px 10px 0; }
+.gt { margin-bottom:16px; }
+h2 { break-after:avoid; }
+@media print { .h-detalle { break-before:page; } }
+.gt-row { display:grid; grid-template-columns:200px 1fr 54px; gap:8px; align-items:center; min-height:17px; break-inside:avoid; }
+.gt-lbl { font-size:7.5pt; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#444; }
+.gt-lbl b { color:#213362; }
+.gt-tl { position:relative; height:17px; }
+.gt-head .gt-tl span { position:absolute; top:0; text-align:center; font-size:7pt; font-weight:800; color:#575756; text-transform:uppercase; }
+.gt-head { border-bottom:1px solid #dfe3ea; margin-bottom:2px; }
+.gt-body { position:relative; }
+.gt-grid { position:absolute; top:0; bottom:0; left:208px; right:62px; pointer-events:none; }
+.gt-grid i { position:absolute; top:0; bottom:0; border-left:1px solid #eef0f3; }
+.gt-per { position:absolute; top:0; bottom:0; background:rgba(255,205,0,.22); border-left:1.5px solid #ffcd00; border-right:1.5px solid #ffcd00; }
+.gt-bar { position:absolute; top:4px; height:9px; border-radius:5px; }
+.gt-bar.perm { opacity:.45; }
+.gt-sin { position:absolute; top:2px; left:4px; font-size:7pt; color:#aaa; font-style:italic; }
+.gt-sem { font-size:7pt; color:#8a8a89; text-align:right; white-space:nowrap; }
+.gt-body .gt-row { border-bottom:1px dashed #f1f2f5; position:relative; }
+</style></head><body>
+<div class="barra-acc"><button onclick="window.print()">Descargar PDF</button><span>En el cuadro de impresión elige "Guardar como PDF"</span></div>
+<div class="hoja">
+  <div class="cab"><img src="${logo}" alt="UNGRD"><div class="ttl"><b>Informe de actividades</b><span>Plan de trabajo 2026 · Equipo de Fortalecimiento de Políticas</span></div></div>
+  <div class="tricolor"><i></i><i></i><i></i></div>
+
+  <div class="datos">
+    <div><label>Contratista</label>${esc(p)}</div>
+    <div><label>Contrato</label>${esc(infCfg.contrato) || '—'}</div>
+    <div><label>Periodo</label>${_infFechaTxt(desde)} al ${_infFechaTxt(hasta)}</div>
+    <div><label>Supervisor(a)</label>${esc(infCfg.supervisor) || '—'}</div>
+    <div><label>Grupo(s)</label>${esc(grupos.join(' · ')) || '—'}</div>
+    <div><label>Fecha de generación</label>${generado}</div>
+    ${infCfg.objeto ? `<div class="full"><label>Objeto del contrato</label>${esc(infCfg.objeto)}</div>` : ''}
+  </div>
+
+  <h2>Resumen del periodo</h2>
+  <div class="kpis">
+    <div class="kpi"><b>${total}</b><span>Actividades</span></div>
+    <div class="kpi"><b>${filas.filter(f => f.rol !== 'Apoyo').length}</b><span>Como responsable</span></div>
+    <div class="kpi"><b>${conteo['FINALIZADA'] || 0}</b><span>Finalizadas</span></div>
+    <div class="kpi"><b>${conMov}</b><span>Con avance en el periodo</span></div>
+    <div class="kpi"><b>${avFin}%</b><span>Avance promedio${avFin > avIni ? ' (+' + (avFin - avIni) + ')' : ''}</span></div>
+  </div>
+  ${total ? `<div class="graf">
+    <div class="caja"><h3>Estado actual de las actividades</h3>${_infDona(conteo, total)}</div>
+    <div class="caja"><h3>Avance ${obls.length ? 'por obligación' : 'por grupo'}</h3>${_infBarras(barras)}
+      <div class="nota-graf"><span><i style="background:#9fb0d6"></i>Al inicio del periodo</span><span><i style="background:#213362"></i>Al cierre del periodo</span></div></div>
+  </div>` : ''}
+
+  ${cronoHTML}
+  <h2 class="${filas.length ? 'h-detalle' : ''}">${obls.length ? 'Actividades por obligación' : 'Detalle de actividades'}</h2>
+  ${total ? seccionesHTML : '<div class="sin">No hay actividades registradas para esta persona en el periodo.</div>'}
+</div>
+</body></html>`;
+}
+</script>
 
 <!-- ═══════════════════════════════════════════════
      MODAL – INGRESO DE USUARIO
